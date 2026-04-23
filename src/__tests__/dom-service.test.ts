@@ -249,3 +249,223 @@ describe('generateSelector', () => {
     expect(found).toBeTruthy();
   });
 });
+
+describe('getInteractiveElements — edge cases', () => {
+  it('marks disabled button as enabled:false', async () => {
+    document.body.innerHTML = '<button disabled>Disabled</button>';
+    const elements = await DomService.getInteractiveElements();
+    const btn = elements.find((e) => e.name === 'Disabled');
+    expect(btn).toBeDefined();
+    expect(btn?.enabled).toBe(false);
+  });
+
+  it('finds ARIA role="button" element', async () => {
+    document.body.innerHTML = '<div role="button" tabindex="0">Custom Button</div>';
+    const elements = await DomService.getInteractiveElements();
+    const el = elements.find((e) => e.name === 'Custom Button');
+    expect(el).toBeDefined();
+    expect(el?.type).toBe('role:button');
+  });
+
+  it('finds element with tabindex >= 0 and accessible name', async () => {
+    document.body.innerHTML = '<span tabindex="0" aria-label="Focusable">x</span>';
+    const elements = await DomService.getInteractiveElements();
+    const el = elements.find((e) => e.name === 'Focusable');
+    expect(el).toBeDefined();
+  });
+
+  it('finds input with metadata for placeholder and value', async () => {
+    document.body.innerHTML = '<input placeholder="Email" value="hi@x.com" />';
+    const elements = await DomService.getInteractiveElements();
+    const input = elements.find((e) => e.metadata?.placeholder === 'Email');
+    expect(input).toBeDefined();
+    expect(input?.metadata?.value).toBe('hi@x.com');
+  });
+
+  it('includes href metadata on anchor elements', async () => {
+    document.body.innerHTML = '<a href="/about">About</a>';
+    const elements = await DomService.getInteractiveElements();
+    const link = elements.find((e) => e.name === 'About');
+    expect(link?.metadata?.href).toContain('/about');
+  });
+
+  it('finds aria-label element', async () => {
+    document.body.innerHTML = '<button aria-label="Delete item"><svg/></button>';
+    const elements = await DomService.getInteractiveElements();
+    const btn = elements.find((e) => e.name === 'Delete item');
+    expect(btn).toBeDefined();
+  });
+});
+
+describe('click — edge cases', () => {
+  it('returns false for disabled element', () => {
+    document.body.innerHTML = '<button id="d" disabled>Nope</button>';
+    const result = DomService.click('#d');
+    expect(result).toBe(false);
+  });
+
+  it('returns false when selector matches nothing', () => {
+    const result = DomService.click('#nonexistent');
+    expect(result).toBe(false);
+  });
+
+  it('returns false when element has zero dimensions', () => {
+    document.body.innerHTML = '<button id="z">Zero</button>';
+    const btn = document.getElementById('z')!;
+    vi.spyOn(btn, 'getBoundingClientRect').mockReturnValue({
+      width: 0, height: 0, x: 0, y: 0, top: 0, left: 0, right: 0, bottom: 0, toJSON: () => {},
+    });
+    const result = DomService.click('#z');
+    expect(result).toBe(false);
+  });
+});
+
+describe('clickByName — edge cases', () => {
+  it('returns false when element not found by name', async () => {
+    const result = await DomService.clickByName('NoSuchButton');
+    expect(result).toBe(false);
+  });
+});
+
+describe('type — edge cases', () => {
+  it('returns false for a disabled input', () => {
+    document.body.innerHTML = '<input id="d" disabled />';
+    const result = DomService.type('#d', 'text');
+    expect(result).toBe(false);
+  });
+
+  it('returns false when selector matches a non-input element', () => {
+    document.body.innerHTML = '<div id="d">Not an input</div>';
+    const result = DomService.type('#d', 'hello');
+    expect(result).toBe(false);
+  });
+
+  it('returns false when selector matches nothing', () => {
+    const result = DomService.type('#nonexistent', 'hello');
+    expect(result).toBe(false);
+  });
+});
+
+describe('typeByName — edge cases', () => {
+  it('returns false when element not found by name', async () => {
+    const result = await DomService.typeByName('Ghost Input', 'hello');
+    expect(result).toBe(false);
+  });
+
+  it('fills textarea by name', async () => {
+    document.body.innerHTML = '<textarea aria-label="Message"></textarea>';
+    const result = await DomService.typeByName('Message', 'Hello world');
+    expect(result).toBe(true);
+    const ta = document.querySelector('textarea') as HTMLTextAreaElement;
+    expect(ta.value).toBe('Hello world');
+  });
+});
+
+describe('findByName — edge cases', () => {
+  it('returns null when nothing matches', async () => {
+    document.body.innerHTML = '<p>Static text</p>';
+    const el = await DomService.findByName('NonExistentButton');
+    expect(el).toBeNull();
+  });
+
+  it('matches by placeholder', async () => {
+    document.body.innerHTML = '<input placeholder="Search here" />';
+    const el = await DomService.findByName('Search here');
+    expect(el).toBeTruthy();
+    expect((el as HTMLInputElement).placeholder).toBe('Search here');
+  });
+
+  it('prefers exact match over partial match', async () => {
+    document.body.innerHTML = `
+      <button>Save</button>
+      <button>Save and continue</button>
+    `;
+    const el = await DomService.findByName('Save');
+    expect(el?.textContent?.trim()).toBe('Save');
+  });
+});
+
+describe('pressKey — edge cases', () => {
+  it('uses active element when selector is null', () => {
+    document.body.innerHTML = '<input id="inp" />';
+    const inp = document.getElementById('inp')!;
+    inp.focus();
+
+    let key = '';
+    inp.addEventListener('keydown', (e) => { key = (e as KeyboardEvent).key; });
+
+    DomService.pressKey(null, 'Tab');
+    expect(key).toBe('Tab');
+  });
+
+  it('returns false when selector matches nothing', () => {
+    const result = DomService.pressKey('#nonexistent', 'Enter');
+    expect(result).toBe(false);
+  });
+
+  it('falls back to form.submit() when requestSubmit is not available', () => {
+    document.body.innerHTML = `<form id="f"><input id="inp" /></form>`;
+    const form = document.getElementById('f') as HTMLFormElement;
+    let submitted = false;
+
+    // Remove requestSubmit to exercise the submit() fallback
+    (form as unknown as Record<string, unknown>).requestSubmit = undefined;
+    form.submit = vi.fn(() => { submitted = true; });
+
+    DomService.pressKey('#inp', 'Enter');
+    expect(submitted).toBe(true);
+  });
+});
+
+describe('pressKeyByName', () => {
+  it('finds element by name and presses key', async () => {
+    document.body.innerHTML = '<input aria-label="Query" />';
+    let pressed = false;
+    const inp = document.querySelector('input')!;
+    inp.addEventListener('keydown', () => { pressed = true; });
+
+    const result = await DomService.pressKeyByName('Query', 'Enter');
+    expect(result).toBe(true);
+    expect(pressed).toBe(true);
+  });
+
+  it('returns false when element not found by name', async () => {
+    const result = await DomService.pressKeyByName('GhostButton', 'Enter');
+    expect(result).toBe(false);
+  });
+});
+
+describe('scroll — edge cases', () => {
+  it('returns false when named element not found', async () => {
+    const result = await DomService.scrollByName('GhostPanel', 'down');
+    expect(result).toBe(false);
+  });
+
+  it('scrolls left and right', () => {
+    const spyLeft = vi.spyOn(document.documentElement, 'scrollBy').mockImplementation(() => {});
+
+    DomService.scroll(null, 'left', 100);
+    expect(spyLeft).toHaveBeenCalledWith({ left: -100, top: 0, behavior: 'smooth' });
+
+    DomService.scroll(null, 'right', 100);
+    expect(spyLeft).toHaveBeenCalledWith({ left: 100, top: 0, behavior: 'smooth' });
+
+    spyLeft.mockRestore();
+  });
+});
+
+describe('getComponentState', () => {
+  it('returns null when component is not found', async () => {
+    const result = await DomService.getComponentState('NonExistentComponent');
+    expect(result).toBeNull();
+  });
+});
+
+describe('getPageContext', () => {
+  it('returns a non-empty string for a page with content', async () => {
+    document.body.innerHTML = '<h1>Hello</h1><p>World</p>';
+    const ctx = await DomService.getPageContext();
+    expect(typeof ctx).toBe('string');
+    expect(ctx.length).toBeGreaterThan(0);
+  });
+});

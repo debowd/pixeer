@@ -1,7 +1,14 @@
-node_modules/                                                                 
-dist/                                                                         
+node_modules/
+dist/
+coverage/
 .turbo/
-*.log                                                                         
-.env            
+*.log
+.env
 .env.*
 !.env.example
+
+# Internal docs
+roadmap.md
+roadmap-check.md
+REPORT.md
+*.pdf

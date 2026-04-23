@@ -1,5 +1,11 @@
 # Pixeer
 
+[![CI](https://github.com/debowd/pixeer/actions/workflows/ci.yml/badge.svg)](https://github.com/debowd/pixeer/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/debowd/pixeer/branch/main/graph/badge.svg)](https://codecov.io/gh/debowd/pixeer)
+[![npm](https://img.shields.io/npm/v/pixeer)](https://www.npmjs.com/package/pixeer)
+[![npm downloads](https://img.shields.io/npm/dw/pixeer)](https://www.npmjs.com/package/pixeer)
+[![License](https://img.shields.io/github/license/debowd/pixeer)](LICENSE)
+
 Transport-agnostic DOM understanding and screen capture for AI agents.
 
 Pixeer lets any web app give an AI agent the ability to **see** and **interact** with the page — without coupling to a specific transport, framework, or browser automation stack.

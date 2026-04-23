@@ -43,6 +43,10 @@ export interface PixeerBridgeOptions {
   enableScreenCapture?: boolean;
   /** JPEG quality for screen captures, 0-1 (default: 0.8) */
   captureQuality?: number;
+  /** Pass a PixeerAnalytics instance to collect action events, stats, and hooks */
+  analytics?: import('./analytics').PixeerAnalytics;
+  /** Transport name — recorded in telemetry and analytics events (e.g. 'livekit', 'postmessage') */
+  transportName?: string;
 }
 
 /**
@@ -52,6 +56,8 @@ export interface PixeerBridgeOptions {
 export interface PixeerBridge {
   /** Tear down all handlers and release resources */
   dispose(): void;
+  /** The analytics instance attached to this bridge, if any */
+  analytics?: import('./analytics').PixeerAnalytics;
 }
 
 /** Direction for scrolling */

@@ -100,6 +100,69 @@ describe('createPixeerBridge', () => {
     expect(result.success).toBe(true);
   });
 
+  it('dom.getComponentState returns error when componentName is missing', async () => {
+    const result = JSON.parse(await mock.call('dom.getComponentState', {}));
+    expect(result.error).toBeDefined();
+    expect(result.error).toContain('componentName is required');
+  });
+
+  it('dom.getComponentState returns error for invalid JSON', async () => {
+    const handler = mock.handlers.get('dom.getComponentState')!;
+    const result = JSON.parse(await handler('not-json'));
+    expect(result.error).toBeDefined();
+  });
+
+  it('dom.click returns error for invalid JSON', async () => {
+    const handler = mock.handlers.get('dom.click')!;
+    const result = JSON.parse(await handler('not-json'));
+    expect(result.success).toBe(false);
+  });
+
+  it('dom.type returns error for invalid JSON', async () => {
+    const handler = mock.handlers.get('dom.type')!;
+    const result = JSON.parse(await handler('not-json'));
+    expect(result.success).toBe(false);
+  });
+
+  it('dom.scroll returns error for invalid JSON', async () => {
+    const handler = mock.handlers.get('dom.scroll')!;
+    const result = JSON.parse(await handler('not-json'));
+    expect(result.success).toBe(false);
+  });
+
+  it('dom.pressKey returns error for invalid JSON', async () => {
+    const handler = mock.handlers.get('dom.pressKey')!;
+    const result = JSON.parse(await handler('not-json'));
+    expect(result.success).toBe(false);
+  });
+
+  it('dom.scroll returns success when called with name', async () => {
+    document.body.innerHTML = '<div id="panel" aria-label="Panel" tabindex="0"></div>';
+    const result = JSON.parse(await mock.call('dom.scroll', { name: 'Panel', direction: 'down' }));
+    // name-based scroll may return false if element has no scroll, but should not error
+    expect(result).toHaveProperty('success');
+  });
+
+  it('dom.pressKey returns success when called with name', async () => {
+    document.body.innerHTML = '<button aria-label="Submit">Submit</button>';
+    const btn = document.querySelector('button')!;
+    vi.spyOn(btn, 'getBoundingClientRect').mockReturnValue({
+      width: 80, height: 30, x: 0, y: 0, top: 0, left: 0, right: 80, bottom: 30, toJSON: () => {},
+    });
+    const result = JSON.parse(await mock.call('dom.pressKey', { name: 'Submit', key: 'Enter' }));
+    expect(result.success).toBe(true);
+  });
+
+  it('screen.capture handler is registered when enableScreenCapture is true', () => {
+    const localMock = createMockTransport();
+    createPixeerBridge(localMock.transport, { enableScreenCapture: true });
+    expect(localMock.handlers.has('screen.capture')).toBe(true);
+  });
+
+  it('screen.capture handler is NOT registered by default', () => {
+    expect(mock.handlers.has('screen.capture')).toBe(false);
+  });
+
   it('dispose() cleans up transport', () => {
     const bridge = createPixeerBridge(mock.transport);
     bridge.dispose();
