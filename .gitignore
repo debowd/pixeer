@@ -11,4 +11,6 @@ coverage/
 roadmap.md
 roadmap-check.md
 REPORT.md
+report*.md
+*.txt
 *.pdf
