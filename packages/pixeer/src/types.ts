@@ -44,6 +44,74 @@ export interface PixeerTransport {
 /**
  * Options you can pass to createPixeerBridge.
  */
+// ---------------------------------------------------------------------------
+// App context enrichment
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-route/view description injected into every dom.getContext response.
+ * Describes what the view shows and what key interactive elements do.
+ */
+export interface PixeerViewContext {
+  /** What this view shows and what's possible here. */
+  description: string;
+  /**
+   * Per-element action hints: key = element's aria-label (exact).
+   * Tells the agent what happens when the element is activated —
+   * e.g. what UI reveals, what modal opens, what data loads.
+   */
+  elements?: Record<string, string>;
+}
+
+/**
+ * App-level context injected at the top of every dom.getContext response.
+ * Gives the agent a mental model of the app's structure and behaviour —
+ * solving the "local horizon" problem where the agent only sees what's
+ * currently rendered and doesn't know what actions will reveal next.
+ *
+ * @example
+ * ```ts
+ * createPixeerBridge(transport, {
+ *   appContext: {
+ *     app: 'Nexora fintech dashboard',
+ *     routes: {
+ *       '/dashboard/accounts': {
+ *         description: 'List of savings and checking accounts.',
+ *         elements: {
+ *           'Receive': 'Opens receive panel with IBAN, routing number, and QR code',
+ *           'Send': 'Opens send money modal with amount and recipient fields',
+ *         },
+ *       },
+ *     },
+ *     schemas: {
+ *       Account: '{ id, name, iban, routingNumber, balance (USD cents), type: "savings"|"checking" }',
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export interface PixeerAppContext {
+  /** High-level description of the app — model, domain, purpose. */
+  app?: string;
+  /**
+   * Route → view description map.
+   * The longest matching path prefix wins when determining the current view.
+   * Keys should be URL path prefixes (e.g. '/dashboard/accounts').
+   */
+  routes?: Record<string, string | PixeerViewContext>;
+  /**
+   * Dynamic current-view resolver — called on every dom.getContext.
+   * Returning undefined falls back to `routes` path matching.
+   * Use when view depends on client-side state, not just the URL.
+   */
+  getCurrentView?: () => string | PixeerViewContext | undefined;
+  /**
+   * Data schema descriptions included in every context snapshot.
+   * Values can be plain-text descriptions or JSON Schema objects.
+   */
+  schemas?: Record<string, string | object>;
+}
+
 export interface PixeerBridgeOptions {
   /** Set to true if you want your agent to be able to capture the screen (default: false) */
   enableScreenCapture?: boolean;
@@ -61,6 +129,15 @@ export interface PixeerBridgeOptions {
   enableMutationTracker?: boolean;
   /** Options forwarded to the MutationTracker (threshold, debounceMs). */
   mutationTrackerOptions?: import('./mutation-tracker').MutationTrackerOptions;
+  /**
+   * App-level context injected at the top of every dom.getContext response.
+   * Solves the "local horizon" problem — agents learn what routes exist, what
+   * buttons reveal, and what data schemas look like BEFORE executing actions.
+   *
+   * Pair with `data-pixeer` HTML attributes for per-element hints:
+   * `<button aria-label="Receive" data-pixeer="Opens IBAN panel">Receive</button>`
+   */
+  appContext?: PixeerAppContext;
 }
 
 /**

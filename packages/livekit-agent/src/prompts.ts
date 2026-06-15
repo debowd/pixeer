@@ -1,3 +1,4 @@
+import { formatStaticAppContext } from 'pixeer';
 import type { PixeerVoiceAgentOptions, DiscoveryQuestion } from './types.js';
 
 export const DEFAULT_SYSTEM_PROMPT = `You are a voice-controlled browser assistant powered by Pixeer.
@@ -5,6 +6,7 @@ You help users navigate and interact with the current web application using voic
 
 Behaviour:
 - Always call get_page_context first to understand what is on screen before acting.
+- The get_page_context response includes an "## App Context" section — read it to understand the full app, all routes, and what every element does before deciding your next steps.
 - After each action, narrate what you did and what the user sees now — one or two sentences maximum.
 - When asked to click something, find the closest accessible name in the element list and use the click tool.
 - For form inputs, use the type tool with the input's accessible label.
@@ -19,17 +21,33 @@ Keep responses short and conversational — this is a voice interface.`;
 
 /**
  * Build the full system prompt for the Pixeer voice agent.
- * Appends discovery question context when questions are configured,
- * so the LLM naturally opens with onboarding questions at session start.
+ *
+ * If `appContext` is provided, its static parts (app description, route map,
+ * schemas) are prepended so the agent has a mental model of the whole app from
+ * the very first turn — before any dom.getContext call.
+ *
+ * Dynamic context (current view, element hints) is injected per-call by the
+ * bridge at runtime; no need to duplicate it here.
  */
-export function buildSystemPrompt(options: Pick<PixeerVoiceAgentOptions, 'systemPrompt' | 'discoveryQuestions'>): string {
-  let prompt = options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
+export function buildSystemPrompt(
+  options: Pick<PixeerVoiceAgentOptions, 'systemPrompt' | 'discoveryQuestions' | 'appContext'>,
+): string {
+  const basePrompt = options.systemPrompt ?? DEFAULT_SYSTEM_PROMPT;
 
-  if (options.discoveryQuestions?.length) {
-    prompt += '\n\n' + buildDiscoveryInstructions(options.discoveryQuestions);
+  const parts: string[] = [];
+
+  // Static app knowledge baked in at session start
+  if (options.appContext) {
+    parts.push(formatStaticAppContext(options.appContext));
   }
 
-  return prompt;
+  parts.push(basePrompt);
+
+  if (options.discoveryQuestions?.length) {
+    parts.push(buildDiscoveryInstructions(options.discoveryQuestions));
+  }
+
+  return parts.join('\n\n');
 }
 
 function buildDiscoveryInstructions(questions: DiscoveryQuestion[]): string {

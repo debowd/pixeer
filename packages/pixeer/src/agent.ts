@@ -75,6 +75,15 @@ export class PixeerAgent {
   }
 
   /**
+   * Click the Nth element matching the accessible name (0-based).
+   * Use when multiple elements share the same label (e.g. repeated "Receive" buttons).
+   */
+  async clickNth(name: string, nth: number): Promise<boolean> {
+    const res = await this.call<{ success: boolean }>('dom.click', { name, nth });
+    return res.success;
+  }
+
+  /**
    * Click an element by CSS selector. Use this when you need pinpoint precision
    * and the accessible name is ambiguous or missing.
    */
@@ -165,6 +174,21 @@ export class PixeerAgent {
   async capture(): Promise<string> {
     const res = await this.call<{ image: string }>('screen.capture');
     return res.image;
+  }
+
+  /**
+   * Wait for an element to appear in the DOM by accessible name.
+   * Polls every 100ms until found or timeout (default 5s).
+   * Returns true if found, false if timed out.
+   */
+  async waitForElement(name: string, timeoutMs = 5000): Promise<boolean> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const res = await this.call<{ found: boolean }>('dom.waitForElement', { name });
+      if (res.found) return true;
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return false;
   }
 
   /**

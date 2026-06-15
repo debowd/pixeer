@@ -2,6 +2,7 @@
 export { DomService } from './dom-service';
 export { ScreenCapture } from './screen-capture';
 export { createPixeerBridge } from './bridge';
+export { formatStaticAppContext, formatFullAppContext } from './context';
 export { createMutationTracker } from './mutation-tracker';
 export { RefMap } from './ref-map';
 export { createWebMCPBridge } from './webmcp-bridge';
@@ -25,6 +26,8 @@ export type {
   PixeerBridgeOptions,
   PixeerBridge,
   ScrollDirection,
+  PixeerAppContext,
+  PixeerViewContext,
 } from './types';
 export type {
   DomDelta,

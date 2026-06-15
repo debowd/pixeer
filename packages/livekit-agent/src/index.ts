@@ -23,4 +23,7 @@ export type {
   PixeerToolsOptions,
   PixeerVoiceAgentOptions,
   RpcCaller,
+  // Re-exported from pixeer for convenience — use the same object in both bridge and agent
+  PixeerAppContext,
+  PixeerViewContext,
 } from './types.js';

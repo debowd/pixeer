@@ -14,6 +14,8 @@ export interface DomDelta {
   oldValue?: string | null;
   /** New value — present for attribute/text changes */
   newValue?: string | null;
+  /** Text preview of the added element's content — present for added nodes with text */
+  preview?: string;
 }
 
 export interface MutationTrackerOptions {
@@ -116,11 +118,18 @@ export function createMutationTracker(
         for (const node of mutation.addedNodes) {
           if (node.nodeType !== Node.ELEMENT_NODE) continue;
           const el = node as Element;
+          // Capture a brief text preview for added nodes so agents can read
+          // what appeared without needing a full re-snapshot.
+          const rawText = el.childElementCount < 30
+            ? el.textContent?.trim().replace(/\s+/g, ' ')
+            : undefined;
+          const preview = rawText ? rawText.slice(0, 150) : undefined;
           pending.push({
             type: 'added',
             ref: refs.getOrCreate(el),
             selector: quickSelector(el),
             tag: el.tagName.toLowerCase(),
+            ...(preview && { preview }),
           });
         }
         for (const node of mutation.removedNodes) {

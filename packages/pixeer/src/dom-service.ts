@@ -322,6 +322,49 @@ function getElementMetadata(element: Element): Record<string, string> {
     }
   }
 
+  // Developer-provided action hint — describes what this element does or reveals.
+  // Add to your elements: <button data-pixeer="Opens IBAN panel">Receive</button>
+  const pixeerHint = element.getAttribute('data-pixeer');
+  if (pixeerHint) metadata.hint = pixeerHint;
+
+  // ARIA state attributes — expose the element's current state and what it controls.
+  // These let the agent know what's collapsed, what popup will open, what's toggled, etc.
+  const ariaExpanded = element.getAttribute('aria-expanded');
+  if (ariaExpanded !== null) metadata.expanded = ariaExpanded;
+
+  const ariaHasPopup = element.getAttribute('aria-haspopup');
+  if (ariaHasPopup && ariaHasPopup !== 'false') metadata.hasPopup = ariaHasPopup;
+
+  const ariaChecked = element.getAttribute('aria-checked');
+  if (ariaChecked !== null) metadata.checked = ariaChecked;
+
+  const ariaPressed = element.getAttribute('aria-pressed');
+  if (ariaPressed !== null) metadata.pressed = ariaPressed;
+
+  const ariaSelected = element.getAttribute('aria-selected');
+  if (ariaSelected !== null) metadata.selected = ariaSelected;
+
+  // Follow aria-controls to preview what this element reveals when activated.
+  // Even when the controlled panel is hidden, we can read its content and report it.
+  const ariaControls = element.getAttribute('aria-controls');
+  if (ariaControls) {
+    const controlled = document.getElementById(ariaControls);
+    if (controlled) {
+      const isHidden =
+        controlled.getAttribute('aria-hidden') === 'true' ||
+        (controlled as HTMLElement).hidden ||
+        (controlled instanceof HTMLElement &&
+          window.getComputedStyle(controlled).display === 'none');
+      const preview = controlled.textContent?.trim().replace(/\s+/g, ' ').slice(0, 120);
+      metadata.controls =
+        ariaControls +
+        (isHidden ? ' [hidden]' : '') +
+        (preview ? `: "${preview}"` : '');
+    } else {
+      metadata.controls = ariaControls;
+    }
+  }
+
   return Object.keys(metadata).length > 0 ? metadata : {};
 }
 
@@ -757,6 +800,56 @@ export const DomService = {
 
     const selector = generateSelector(element);
     return this.click(selector);
+  },
+
+  async clickByNameNth(name: string, nth: number): Promise<boolean> {
+    const all = await this.findAllByName(name);
+    const element = all[nth];
+    if (!element) {
+      console.warn(`[Pixeer] Element ${JSON.stringify(name)} not found at index ${nth} (found ${all.length})`);
+      return false;
+    }
+    return this.click(generateSelector(element));
+  },
+
+  async findAllByName(name: string): Promise<Element[]> {
+    if (!isBrowser) return [];
+    const normalizedSearch = name.toLowerCase().trim();
+    const matches: Element[] = [];
+    try {
+      const { computeAccessibleName, isInaccessible } = await import('dom-accessibility-api');
+      const walker = document.createTreeWalker(
+        document.body,
+        NodeFilter.SHOW_ELEMENT,
+        {
+          acceptNode: (node) => {
+            const element = node as Element;
+            if (isInaccessible(element)) return NodeFilter.FILTER_REJECT;
+            if (isInteractive(element)) return NodeFilter.FILTER_ACCEPT;
+            return NodeFilter.FILTER_SKIP;
+          },
+        }
+      );
+      let node: Node | null;
+      while ((node = walker.nextNode())) {
+        const element = node as Element;
+        try {
+          const accessibleName = computeAccessibleName(element).toLowerCase();
+          const textContent = element.textContent?.toLowerCase().trim() ?? '';
+          const ariaLabel = element.getAttribute('aria-label')?.toLowerCase() ?? '';
+          if (
+            accessibleName === normalizedSearch ||
+            textContent === normalizedSearch ||
+            ariaLabel === normalizedSearch
+          ) {
+            matches.push(element);
+          }
+        } catch { /* keep going */ }
+      }
+    } catch (error) {
+      console.error('[Pixeer] findAllByName failed:', error);
+    }
+    return matches;
   },
 
   /**

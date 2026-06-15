@@ -19,8 +19,11 @@ import { PixeerAnalytics } from './analytics';
 import { sendTelemetry } from './telemetry';
 import { createMutationTracker } from './mutation-tracker';
 import type { MutationTracker } from './mutation-tracker';
+import { formatFullAppContext } from './context.js';
 import type { PixeerTransport, PixeerBridgeOptions, PixeerBridge } from './types';
 import type { PixeerEvent } from './analytics';
+import type { InteractiveElement } from './types';
+import type { DomDelta } from './mutation-tracker';
 
 type ParseResult<T> =
   | { ok: true; data: T }
@@ -51,6 +54,48 @@ function safeMetaFromPayload(payload: string): Record<string, unknown> | undefin
     // ignore
   }
   return undefined;
+}
+
+/**
+ * Turn a raw DomDelta array into a one-line human-readable summary.
+ * Agents call dom.getDelta after each action — the summary lets them
+ * understand what changed without parsing every individual delta.
+ */
+function buildDeltaSummary(deltas: DomDelta[]): string {
+  const added = deltas.filter((d) => d.type === 'added');
+  const removed = deltas.filter((d) => d.type === 'removed');
+  const stateChanges = deltas.filter(
+    (d) =>
+      d.type === 'modified' &&
+      (d.attribute === 'aria-expanded' ||
+        d.attribute === 'aria-checked' ||
+        d.attribute === 'aria-pressed'),
+  );
+
+  const parts: string[] = [];
+
+  if (added.length > 0) {
+    const previews = added
+      .filter((d) => d.preview)
+      .slice(0, 2)
+      .map((d) => `"${d.preview!.slice(0, 60)}"`)
+      .join(', ');
+    parts.push(
+      `${added.length} element${added.length > 1 ? 's' : ''} appeared` +
+        (previews ? `: ${previews}` : ''),
+    );
+  }
+
+  if (removed.length > 0) {
+    parts.push(`${removed.length} element${removed.length > 1 ? 's' : ''} disappeared`);
+  }
+
+  for (const change of stateChanges.slice(0, 2)) {
+    const attr = (change.attribute ?? '').replace('aria-', '');
+    parts.push(`${attr} → ${change.newValue}`);
+  }
+
+  return parts.length > 0 ? parts.join('; ') : 'no DOM changes';
 }
 
 function makeTracked(
@@ -96,6 +141,7 @@ function makeTracked(
     }
   };
 }
+
 
 /**
  * Wire up your transport so your agent can see and interact with the page.
@@ -143,8 +189,16 @@ export function createPixeerBridge(
     'dom.getContext',
     track('dom.getContext', async () => {
       try {
-        const context = await DomService.getPageContext();
-        const elements = await DomService.getInteractiveElements();
+        const [rawContext, elements] = await Promise.all([
+          DomService.getPageContext(),
+          DomService.getInteractiveElements(),
+        ]);
+
+        // Prepend app-level context header when configured
+        const appCtx = options?.appContext;
+        const context = appCtx
+          ? formatFullAppContext(appCtx, elements) + rawContext
+          : rawContext;
 
         if (analytics) {
           analytics.emit({
@@ -156,6 +210,7 @@ export function createPixeerBridge(
               contextLength: context.length,
               elementCount: elements.length,
               estimatedTokens: Math.ceil(context.length / 4),
+              hasAppContext: !!appCtx,
             },
           });
         }
@@ -172,19 +227,22 @@ export function createPixeerBridge(
     'dom.click',
     track('dom.click', async (payload: string) => {
       try {
-        const parsed = parsePayload<{ selector?: unknown; name?: unknown }>(payload);
+        const parsed = parsePayload<{ selector?: unknown; name?: unknown; nth?: unknown }>(payload);
         if (!parsed.ok) {
           return JSON.stringify({ success: false, error: parsed.error });
         }
-        const { selector, name } = parsed.data;
+        const { selector, name, nth } = parsed.data;
 
         const selectorValue = typeof selector === 'string' ? selector.trim() : '';
         const nameValue = typeof name === 'string' ? name.trim() : '';
+        const nthValue = typeof nth === 'number' ? nth : undefined;
 
         let success: boolean;
 
         if (selectorValue) {
           success = DomService.click(selectorValue);
+        } else if (nameValue && nthValue !== undefined) {
+          success = await DomService.clickByNameNth(nameValue, nthValue);
         } else if (nameValue) {
           success = await DomService.clickByName(nameValue);
         } else {
@@ -341,6 +399,22 @@ export function createPixeerBridge(
     }),
   );
 
+  transport.onMethod(
+    'dom.waitForElement',
+    track('dom.waitForElement', async (payload: string) => {
+      try {
+        const parsed = parsePayload<{ name?: unknown }>(payload);
+        if (!parsed.ok) return JSON.stringify({ found: false });
+        const nameValue = typeof parsed.data.name === 'string' ? parsed.data.name.trim() : '';
+        if (!nameValue) return JSON.stringify({ found: false });
+        const el = await DomService.findByName(nameValue);
+        return JSON.stringify({ found: el !== null });
+      } catch {
+        return JSON.stringify({ found: false });
+      }
+    }),
+  );
+
   if (screenCapture) {
     transport.onMethod(
       'screen.capture',
@@ -359,7 +433,9 @@ export function createPixeerBridge(
   if (tracker) {
     transport.onMethod('dom.getDelta', async () => {
       try {
-        return JSON.stringify(tracker.getDelta());
+        const result = tracker.getDelta();
+        const summary = buildDeltaSummary(result.deltas);
+        return JSON.stringify({ ...result, summary });
       } catch (err) {
         const message = err instanceof Error ? err.message : 'getDelta failed';
         return JSON.stringify({ error: message, deltas: [], needsFullSnapshot: true });

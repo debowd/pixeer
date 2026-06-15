@@ -27,15 +27,24 @@
   },
   "peerDependencies": {
     "@livekit/agents": ">=1.0.0",
+    "@livekit/agents-plugin-silero": ">=1.0.0",
+    "pixeer": ">=0.0.1",
     "zod": ">=3.0.0"
   },
   "peerDependenciesMeta": {
     "@livekit/agents": {
       "optional": true
+    },
+    "@livekit/agents-plugin-silero": {
+      "optional": true
+    },
+    "pixeer": {
+      "optional": true
     }
   },
   "devDependencies": {
     "@types/node": "^25.0.3",
+    "pixeer": "workspace:*",
     "tsdown": "^0.21.10",
     "typescript": "^5.9.3",
     "vitest": "^3.0.0",

@@ -248,6 +248,40 @@ describe('buildSystemPrompt', () => {
     const prompt = buildSystemPrompt({ discoveryQuestions: [] });
     expect(prompt).toBe(DEFAULT_SYSTEM_PROMPT);
   });
+
+  it('prepends static app context when appContext is provided', () => {
+    const prompt = buildSystemPrompt({
+      appContext: {
+        app: 'Nexora fintech dashboard',
+        routes: { '/accounts': 'Bank accounts with send/receive' },
+        schemas: { Account: '{ id, name, balance }' },
+      },
+    });
+    expect(prompt).toContain('Nexora fintech dashboard');
+    expect(prompt).toContain('/accounts');
+    expect(prompt).toContain('{ id, name, balance }');
+    // Base prompt still present
+    expect(prompt).toContain('voice-controlled');
+  });
+
+  it('combines appContext, base prompt, and discovery questions in order', () => {
+    const prompt = buildSystemPrompt({
+      appContext: { app: 'MyApp' },
+      discoveryQuestions: [{ id: 'role', question: 'What is your role?' }],
+    });
+    const appIdx = prompt.indexOf('MyApp');
+    const baseIdx = prompt.indexOf('voice-controlled');
+    const discoveryIdx = prompt.indexOf('What is your role?');
+    expect(appIdx).toBeLessThan(baseIdx);
+    expect(baseIdx).toBeLessThan(discoveryIdx);
+  });
+
+  it('appContext without routes or schemas only shows app description', () => {
+    const prompt = buildSystemPrompt({ appContext: { app: 'SimpleApp' } });
+    expect(prompt).toContain('SimpleApp');
+    expect(prompt).not.toContain('Navigation:');
+    expect(prompt).not.toContain('Data schemas:');
+  });
 });
 
 // ---------------------------------------------------------------------------

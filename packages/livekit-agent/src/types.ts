@@ -23,6 +23,10 @@ export interface LiveKitRoom {
   remoteParticipants: Map<string, LiveKitParticipant>;
 }
 
+// Re-export PixeerAppContext from the core package so consumers can import
+// it from a single place when wiring up both the bridge and the voice agent.
+export type { PixeerAppContext, PixeerViewContext } from 'pixeer';
+
 // ---------------------------------------------------------------------------
 // Core types
 // ---------------------------------------------------------------------------
@@ -97,6 +101,27 @@ export interface PixeerVoiceAgentOptions {
    * steps, and keep narrations short.
    */
   systemPrompt?: string;
+  /**
+   * App-level context — the same object you pass to `createPixeerBridge`.
+   * The static parts (app description, all routes, schemas) are baked into
+   * the system prompt so the voice/tour agent can plan multi-step flows before
+   * it even calls dom.getContext for the first time.
+   *
+   * Dynamic parts (getCurrentView, element hints) are handled by the bridge at
+   * runtime — no need to duplicate them here.
+   *
+   * @example
+   * ```ts
+   * const appCtx: PixeerAppContext = {
+   *   app: 'Nexora fintech dashboard',
+   *   routes: { '/accounts': 'Bank accounts with send/receive' },
+   * };
+   * // Use the same object in both places:
+   * createPixeerBridge(transport, { appContext: appCtx });
+   * withPixeerTools({ appContext: appCtx }, async ({ systemPrompt }) => { ... });
+   * ```
+   */
+  appContext?: import('pixeer').PixeerAppContext;
   /**
    * Questions asked at session start to learn the user's role and goals.
    * Answers are embedded in the system prompt so the LLM personalises guidance.
